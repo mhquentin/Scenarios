@@ -8,22 +8,28 @@ import platform
 
 from enum import Enum
 
-now =datetime.now()
+ADDR = tools.str_to_uuid('14e05692-d4bf-11eb-8d10-0800272eacd7')
 
 PACKAGE_NAME="xaal.Scenario"
 logger = logging.getLogger(PACKAGE_NAME)
 
+def UUID(uuids):
+    r = []
+    for k in uuids:
+        r.append(tools.get_uuid(k))
+    return r
+
 #strftime("%H:%M:%S", datetime.now())
 
-BORDSDULIT = 'a62c3184-d262-11eb-ab39-0800272eac00'
-EVERYWHERE = 'a62c3185-d262-11eb-ab39-0800272eac00'
-PORTE = 'a62c3186-d262-11eb-ab39-0800272eac00'
-CHAMBRE = 'a62c3187-d262-11eb-ab39-0800272eac00'
-COULOIR = 'a62c3188-d262-11eb-ab39-0800272eac00'
-TOILETTE = 'a62c3189-d262-11eb-ab39-0800272eac00'
+BORDSDULIT = UUID(['7ce24829-d4bb-11eb-8d10-0800272eac00'])
+EVERYWHERE = UUID(['7ce2482a-d4bb-11eb-8d10-0800272eac00'])
+PORTE = UUID(['7ce2482b-d4bb-11eb-8d10-0800272eac00'])
+CHAMBRE = UUID(['7ce2482c-d4bb-11eb-8d10-0800272eac00'])
+COULOIR = UUID(['7ce2482d-d4bb-11eb-8d10-0800272eac00'])
+TOILETTE = UUID(['7ce2482e-d4bb-11eb-8d10-0800272eac00'])
 
 MQTT = [tools.str_to_uuid('505e1614-ce9d-11eb-9335-080027dd8560')]
-MONITORING_DEVICES = [BORDSDULIT,EVERYWHERE,PORTE,CHAMBRE,COULOIR,TOILETTE]
+MONITORING_DEVICES = BORDSDULIT + EVERYWHERE + PORTE + CHAMBRE + COULOIR + TOILETTE
 
 
 # ------ PEUT ETRE UTILE PLUS TARD ------ #
@@ -84,7 +90,7 @@ def all_off():
 def all_right():
     send(MQTT,'droite',{'topic':'/topic/qos0'})
 
-def all_left():s
+def all_left():
     send(MQTT,'gauche',{'topic':'/topic/qos0'})
 
 def up_size(topic,size):
@@ -115,12 +121,16 @@ def handle_msg(msg):
     global previous_state
     if not msg.is_notify():
         return
-    
-    if msg.is_attributes_change():
 
+    if msg.is_attributes_change():
         # Au bord du lit
-        if str(msg.source) == BORDSDULIT:
-            time_h =now.strftime("%H")
+        print(type(msg.source))
+        print(type(BORDSDULIT))
+        print(type(BORDSDULIT[0]))
+        if [msg.source] == BORDSDULIT:
+            print("IN")
+            now = datetime.now()
+            time_h = now.strftime("%H")
             today8am = now.replace(hour=8, minute=0, second=0, microsecond=0)
 
             # Aller
@@ -139,7 +149,7 @@ def handle_msg(msg):
                 return
 
         # Dans la porte
-        if str(msg.source) == PORTE:
+        if msg.source == PORTE:
 
             # Aller
             if (previous_state == "bordsdulit" and msg.body['Presence']==True):
@@ -154,7 +164,7 @@ def handle_msg(msg):
                 return   
 
         # Dans le couloir
-        if str(msg.source) == COULOIR:
+        if msg.source == COULOIR:
             
             # Aller
             if (previous_state == "porte" and msg.body['Presence']==True):
@@ -171,8 +181,88 @@ def handle_msg(msg):
                 return                  
 
         # Dans les toilettes
-        if str(msg.source) == TOILETTE:
+        if msg.source == TOILETTE:
             if (previous_state == "couloir" and msg.body['Presence']==True):
+                all_off()
+                previous_state = "toilette"
+                return                
+
+def on_event(event,dev):
+##    print(event)
+##    print(dev)
+    if event == Notification.new_device:
+        global previous_state
+        print(dev.address)
+        print(BORDSDULIT)
+        print(type(dev.address))
+        print(type(BORDSDULIT))
+        if dev.address == BORDSDULIT : devices.bordsdulit = dev
+        if dev.address == PORTE : devices.porte = dev
+        if dev.address == COULOIR : devices.couloir = dev
+        if dev.address == EVERYWHERE : devices.everywhere = dev
+        if dev.address == TOILETTE : devices.toilette = dev
+        if dev.address == CHAMBRE : devices.chambre = dev
+
+    if event == Notification.attribute_change:
+##        print(dev.attributes)
+##        print(dev)
+##        print("PORTE : ",devices.porte)
+        logger.info(dev.attributes)
+        if dev == devices.bordsdulit:
+            now = datetime.now()
+            time_h = now.strftime("%H")
+            today8am = now.replace(hour=8, minute=0, second=0, microsecond=0)
+
+            # Aller
+            if (now > today8am and dev.attributes['Presence']==True and not(previous_state == "porte")):
+                all_up_size(8)
+                right("esp32_1")
+                right("esp32_2")
+                left("esp32_3")                            
+                previous_state = "bordsdulit"
+                return
+            
+            # Retour
+            if (previous_state == "porte" and dev.attributes['Presence']==True):
+                all_off()
+                previous_state = "bordsdulit"
+                return
+
+        # Dans la porte
+        if dev == devices.porte:
+
+            # Aller
+            if (previous_state == "bordsdulit" and dev.attributes['Presence']==True):
+                all_down_size(3)
+                previous_state = "porte"
+                return
+
+            # Retour
+            if (previous_state == "couloir" and dev.attributes['Presence']==True): ## faut traiter le chevauchement des zones vcouloirs et porte              
+                all_down_size(3)
+                previous_state = "porte"
+                return   
+
+        # Dans le couloir
+        if dev == devices.couloir:
+            
+            # Aller
+            if (previous_state == "porte" and dev.attributes['Presence']==True):
+                all_down_size(2)
+                previous_state = "couloir"
+                return
+
+            # Retour            
+            if (previous_state == "toilette" and dev.attributes['Presence']==True):
+                all_left()
+                all_up_size(10)
+                left("esp32_1")
+                previous_state = "couloir"
+                return                  
+
+        # Dans les toilettes
+        if dev == devices.toilette:
+            if (previous_state == "couloir" and dev.attributes['Presence']==True):
                 all_off()
                 previous_state = "toilette"
                 return                
@@ -192,14 +282,7 @@ def filter_msg(msg):
 
 def main():
     global mon,device
-    cfg = tools.load_cfg(PACKAGE_NAME)
-    if cfg == None:
-        print(cfg)
-        logger.info('New config file')
-        cfg = tools.new_cfg(PACKAGE_NAME)
-        cfg.write()
-    device = Device('scenario.basic')
-    device.address=tools.str_to_uuid(cfg['config']['addr'])
+    device = Device('scenario.basic',ADDR)
     state=device.new_attribute('state')
     state.value = "Init"
     device.info = '%s@%s' % (PACKAGE_NAME,platform.node())
@@ -217,9 +300,9 @@ def main():
     device.add_method('off',off)
     engine = Engine()
     engine.add_device(device)
-    engine.add_rx_handler(handle_msg)
+##    engine.add_rx_handler(handle_msg)
     mon = Monitor(device,filter_func = filter_msg)
-    mon.subscribe(handle_msg)
+    mon.subscribe(on_event)
     display_init()
     engine.run()
     
