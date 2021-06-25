@@ -1,14 +1,21 @@
 from xaal.lib import Device,Engine,tools,Message,helpers
 from xaal.monitor import Monitor,Notification
 from datetime import datetime
-import time
 import sys
+import os
 import logging
 import platform
+import locale
+
+locale.setlocale(locale.LC_TIME,'')
+
+import time
 
 from enum import Enum
 
 ADDR = tools.str_to_uuid('14e05692-d4bf-11eb-8d10-0800272eacd7')
+
+os.chdir("/home/user/xaal_svn_branches/0.7/scripts/")
 
 PACKAGE_NAME="xaal.Scenario"
 logger = logging.getLogger(PACKAGE_NAME)
@@ -21,18 +28,18 @@ def UUID(uuids):
 
 #strftime("%H:%M:%S", datetime.now())
 
-BORDSDULIT = UUID(['7ce24829-d4bb-11eb-8d10-0800272eac00'])
-EVERYWHERE = UUID(['7ce2482a-d4bb-11eb-8d10-0800272eac00'])
-PORTE = UUID(['7ce2482b-d4bb-11eb-8d10-0800272eac00'])
-CHAMBRE = UUID(['7ce2482c-d4bb-11eb-8d10-0800272eac00'])
-COULOIR = UUID(['7ce2482d-d4bb-11eb-8d10-0800272eac00'])
-TOILETTE = UUID(['7ce2482e-d4bb-11eb-8d10-0800272eac00'])
+BORDSDULIT = UUID(['e7f60ee3-d583-11eb-9cd5-b54f7b90f500'])
+EVERYWHERE = UUID(['e7f60ee4-d583-11eb-9cd5-b54f7b90f5000'])
+PORTE = UUID(['e7f60ee5-d583-11eb-9cd5-b54f7b90f500'])
+CHAMBRE = UUID(['e7f60ee6-d583-11eb-9cd5-b54f7b90f500'])
+COULOIR = UUID(['e7f60ee7-d583-11eb-9cd5-b54f7b90f500'])
+TOILETTE = UUID(['e7f60ee8-d583-11eb-9cd5-b54f7b90f500'])
 
-MQTT = [tools.str_to_uuid('505e1614-ce9d-11eb-9335-080027dd8560')]
+MQTT = [tools.str_to_uuid('e14c38ba-d585-11eb-9cd5-b54f7b90f5c8')]
 MONITORING_DEVICES = BORDSDULIT + EVERYWHERE + PORTE + CHAMBRE + COULOIR + TOILETTE
 
 
-# ------ PEUT ETRE UTILE PLUS TARD ------ #
+# ------ DEFINITION DES ZONES ------ #
 
 class Devices:
     def __init__(self):
@@ -62,6 +69,7 @@ class Devices:
 
 device = None
 previous_state = None
+alexa_msg = False
 devices = Devices()
 #print(strftime("%Y-%m-%d %H:%M:%S", datetime.now()))
 
@@ -115,106 +123,34 @@ def left(topic):
     send(MQTT,'gauche',{'topic':topic})
 
 
-# ------ RECUPERATION MESSAGE ET TRAITEMENT DU SCENARIO ------ #
-
-def handle_msg(msg):
-    global previous_state
-    if not msg.is_notify():
-        return
-
-    if msg.is_attributes_change():
-        # Au bord du lit
-        print(type(msg.source))
-        print(type(BORDSDULIT))
-        print(type(BORDSDULIT[0]))
-        if [msg.source] == BORDSDULIT:
-            print("IN")
-            now = datetime.now()
-            time_h = now.strftime("%H")
-            today8am = now.replace(hour=8, minute=0, second=0, microsecond=0)
-
-            # Aller
-            if (now > today8am and msg.body['Presence']==True and not(previous_state == "porte")):
-                all_up_size(8)
-                right("esp32_1")
-                right("esp32_2")
-                left("esp32_3")                            
-                previous_state = "bordsdulit"
-                return
-            
-            # Retour
-            if (previous_state == "porte" and msg.body['Presence']==True):
-                all_off()
-                previous_state = "bordsdulit"
-                return
-
-        # Dans la porte
-        if msg.source == PORTE:
-
-            # Aller
-            if (previous_state == "bordsdulit" and msg.body['Presence']==True):
-                all_down_size(3)
-                previous_state = "porte"
-                return
-
-            # Retour
-            if (previous_state == "couloir" and msg.body['Presence']==True): ## faut traiter le chevauchement des zones vcouloirs et porte              
-                all_down_size(3)
-                previous_state = "porte"
-                return   
-
-        # Dans le couloir
-        if msg.source == COULOIR:
-            
-            # Aller
-            if (previous_state == "porte" and msg.body['Presence']==True):
-                all_down_size(2)
-                previous_state = "couloir"
-                return
-
-            # Retour            
-            if (previous_state == "toilette" and msg.body['Presence']==True):
-                all_left()
-                all_up_size(10)
-                left("esp32_1")
-                previous_state = "couloir"
-                return                  
-
-        # Dans les toilettes
-        if msg.source == TOILETTE:
-            if (previous_state == "couloir" and msg.body['Presence']==True):
-                all_off()
-                previous_state = "toilette"
-                return                
+# ------ RECUPERATION NOTIFICATION ET TRAITEMENT DU SCENARIO ------ #             
 
 def on_event(event,dev):
-##    print(event)
-##    print(dev)
+    global target
     if event == Notification.new_device:
-        global previous_state
-        print(dev.address)
-        print(BORDSDULIT)
-        print(type(dev.address))
-        print(type(BORDSDULIT))
-        if dev.address == BORDSDULIT : devices.bordsdulit = dev
-        if dev.address == PORTE : devices.porte = dev
-        if dev.address == COULOIR : devices.couloir = dev
-        if dev.address == EVERYWHERE : devices.everywhere = dev
-        if dev.address == TOILETTE : devices.toilette = dev
-        if dev.address == CHAMBRE : devices.chambre = dev
+        global previous_state, alexa_msg
+        if [dev.address] == BORDSDULIT :
+            devices.bordsdulit = dev
+        if [dev.address] == PORTE : devices.porte = dev
+        if [dev.address] == COULOIR : devices.couloir = dev
+        if [dev.address] == EVERYWHERE : devices.everywhere = dev
+        if [dev.address] == TOILETTE : devices.toilette = dev
+        if [dev.address] == CHAMBRE : devices.chambre = dev
 
     if event == Notification.attribute_change:
-##        print(dev.attributes)
-##        print(dev)
-##        print("PORTE : ",devices.porte)
         logger.info(dev.attributes)
         if dev == devices.bordsdulit:
             now = datetime.now()
+            time_all_date = now.strftime("%d %B %Y")
+            time_h_m = now.strftime("%H:%M")
+            time_d = now.strftime("%d")
             time_h = now.strftime("%H")
             today8am = now.replace(hour=8, minute=0, second=0, microsecond=0)
-
             # Aller
-            if (now > today8am and dev.attributes['Presence']==True and not(previous_state == "porte")):
+            if (now > today8am and dev.attributes['Presence']==True and target == False):
+                if (alexa_msg == False):
+                    os.system('./alexa_remote_control.sh -d "Echo MaD" -e speak:"Bonjour, on est le %s, il est %s, je vais vous indiquer le chemin"'%(time_all_date,time_h_m))
+                    alexa_msg = True
                 all_up_size(8)
                 right("esp32_1")
                 right("esp32_2")
@@ -223,8 +159,13 @@ def on_event(event,dev):
                 return
             
             # Retour
-            if (previous_state == "porte" and dev.attributes['Presence']==True):
+            if (previous_state == "porte" and dev.attributes['Presence']==True and target == True):
                 all_off()
+                previous_state = "bordsdulit"
+                return
+
+            if (previous_state == "porte" and dev.attributes['Presence']==True and target == False):
+                all_up_size(8)
                 previous_state = "bordsdulit"
                 return
 
@@ -238,16 +179,21 @@ def on_event(event,dev):
                 return
 
             # Retour
-            if (previous_state == "couloir" and dev.attributes['Presence']==True): ## faut traiter le chevauchement des zones vcouloirs et porte              
+            if (previous_state == "couloir" and dev.attributes['Presence']==True and target == True): ## faut traiter le chevauchement des zones vcouloirs et porte              
                 all_down_size(3)
                 previous_state = "porte"
-                return   
+                return
+
+            if (previous_state == "couloir" and dev.attributes['Presence']==True and target == False): ## faut traiter le chevauchement des zones vcouloirs et porte              
+                all_up_size(3)
+                previous_state = "porte"
+                return  
 
         # Dans le couloir
         if dev == devices.couloir:
             
             # Aller
-            if (previous_state == "porte" and dev.attributes['Presence']==True):
+            if (previous_state == "porte" and dev.attributes['Presence']==True and target == False):
                 all_down_size(2)
                 previous_state = "couloir"
                 return
@@ -258,12 +204,20 @@ def on_event(event,dev):
                 all_up_size(10)
                 left("esp32_1")
                 previous_state = "couloir"
+                return  
+ 
+            if (previous_state == "porte" and dev.attributes['Presence']==True and target == True):
+                all_left()
+                all_up_size(10)
+                left("esp32_1")
+                previous_state = "couloir"
                 return                  
 
         # Dans les toilettes
         if dev == devices.toilette:
             if (previous_state == "couloir" and dev.attributes['Presence']==True):
                 all_off()
+                target = True
                 previous_state = "toilette"
                 return                
 
@@ -281,7 +235,8 @@ def filter_msg(msg):
 # ------ CREATION DEVICE SCENARIO ------ #
 
 def main():
-    global mon,device
+    global mon,device,target
+    target = False
     device = Device('scenario.basic',ADDR)
     state=device.new_attribute('state')
     state.value = "Init"
