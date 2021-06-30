@@ -153,7 +153,8 @@ def on_event(event,dev):
             # Aller
             if ((now < today8am and dev.attributes['Presence']==True and target == False)or(state.value==True and dev.attributes['Presence']==True and target == False)):
                 if (alexa_msg == False):
-                    os.system('./alexa_remote_control.sh -d "Echo MaD" -e speak:"Bonjour, on est le %s, il est %s, je vais vous indiquer le chemin"'%(time_all_date,time_h_m))
+                    #os.system('./alexa_remote_control.sh -d "Echo MaD" -e speak:"Bonjour, on est le %s, il est %s, je vais vous indiquer le chemin"'%(time_all_date,time_h_m))
+                    os.system('./alexa_remote_control.sh -d "Echo MaD" -e speak:"Vous vous êtes levé,je vais vous indiquer le chemin des toilettes)
                     alexa_msg = True
                 all_up_size(8)
                 right("esp32_1")
@@ -210,6 +211,7 @@ def on_event(event,dev):
 
             # Retour            
             if (previous_state == "toilette" and dev.attributes['Presence']==True):
+                os.system('./alexa_remote_control.sh -d "Echo MaD" -e speak:"Vous êtes sortie. J éteins les lumières et je vais vous guider vers le lit"')
                 all_left()
                 all_up_size(8)
                 #up_size("esp32_1",10)
