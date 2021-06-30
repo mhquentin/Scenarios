@@ -17,7 +17,7 @@ ADDR = tools.str_to_uuid('14e05692-d4bf-11eb-8d10-0800272eacd7')
 
 os.chdir("/home/user/xaal_svn_branches/0.7/scripts/")
 
-PACKAGE_NAME="xaal.Scenario"
+PACKAGE_NAME="xaal.Scenario_matin"
 logger = logging.getLogger(PACKAGE_NAME)
 
 def UUID(uuids):
@@ -34,6 +34,8 @@ PORTE = UUID(['e7f60ee5-d583-11eb-9cd5-b54f7b90f500'])
 CHAMBRE = UUID(['e7f60ee6-d583-11eb-9cd5-b54f7b90f500'])
 COULOIR = UUID(['e7f60ee7-d583-11eb-9cd5-b54f7b90f500'])
 TOILETTE = UUID(['e7f60ee8-d583-11eb-9cd5-b54f7b90f500'])
+LUM_WC = UUID(['93e09005-708e-11e8-956e-00fec8f7138c'])
+LUM_COULOIR = UUID(['93e09006-708e-11e8-956e-00fec8f7138c'])
 
 MQTT = [tools.str_to_uuid('e14c38ba-d585-11eb-9cd5-b54f7b90f5c8')]
 MONITORING_DEVICES = BORDSDULIT + EVERYWHERE + PORTE + CHAMBRE + COULOIR + TOILETTE
@@ -66,7 +68,7 @@ class Devices:
         return False
 
 # ------ INITIALISATION DES VARIABLES ------ #
-
+end = False
 device = None
 previous_state = None
 alexa_msg = False
@@ -127,8 +129,10 @@ def left(topic):
 
 def on_event(event,dev):
     global target
+    global state
+    global end
+    global previous_state , alexa_msg
     if event == Notification.new_device:
-        global previous_state, alexa_msg
         if [dev.address] == BORDSDULIT :
             devices.bordsdulit = dev
         if [dev.address] == PORTE : devices.porte = dev
@@ -147,7 +151,7 @@ def on_event(event,dev):
             time_h = now.strftime("%H")
             today8am = now.replace(hour=8, minute=0, second=0, microsecond=0)
             # Aller
-            if (now > today8am and dev.attributes['Presence']==True and target == False):
+            if ((now < today8am and dev.attributes['Presence']==True and target == False)or(state.value==True and dev.attributes['Presence']==True and target == False)):
                 if (alexa_msg == False):
                     os.system('./alexa_remote_control.sh -d "Echo MaD" -e speak:"Bonjour, on est le %s, il est %s, je vais vous indiquer le chemin"'%(time_all_date,time_h_m))
                     alexa_msg = True
@@ -161,6 +165,8 @@ def on_event(event,dev):
             # Retour
             if (previous_state == "porte" and dev.attributes['Presence']==True and target == True):
                 all_off()
+                end = True
+                state.value = False
                 previous_state = "bordsdulit"
                 return
 
@@ -173,14 +179,17 @@ def on_event(event,dev):
         if dev == devices.porte:
 
             # Aller
-            if (previous_state == "bordsdulit" and dev.attributes['Presence']==True):
+            if (previous_state == "bordsdulit" and dev.attributes['Presence']==True and end == False):
                 all_down_size(3)
+                os.system('./alexa_remote_control.sh -d "Echo MaD" -e speak:"Laissez moi vous allumer les lumières"')
+                send(LUM_COULOIR,'turn_on')
                 previous_state = "porte"
                 return
 
             # Retour
             if (previous_state == "couloir" and dev.attributes['Presence']==True and target == True): ## faut traiter le chevauchement des zones vcouloirs et porte              
                 all_down_size(3)
+                send(LUM_COULOIR,'turn_off')
                 previous_state = "porte"
                 return
 
@@ -195,21 +204,33 @@ def on_event(event,dev):
             # Aller
             if (previous_state == "porte" and dev.attributes['Presence']==True and target == False):
                 all_down_size(2)
+                send(LUM_WC,'turn_on')
                 previous_state = "couloir"
                 return
 
             # Retour            
             if (previous_state == "toilette" and dev.attributes['Presence']==True):
                 all_left()
-                all_up_size(10)
-                left("esp32_1")
+                all_up_size(8)
+                #up_size("esp32_1",10)
+                #up_size("esp32_2",10)
+                #up_size("esp32_3",10)
+                #left("esp32_1")
+                #left("esp32_2")
+                #left("esp32_3")
+                send(LUM_WC,'turn_off')
                 previous_state = "couloir"
                 return  
  
             if (previous_state == "porte" and dev.attributes['Presence']==True and target == True):
                 all_left()
-                all_up_size(10)
-                left("esp32_1")
+                all_up_size(8)
+                #left("esp32_1")
+                #left("esp32_2")
+                #left("esp32_3")
+                #up_size("esp32_1",10)
+                #up_size("esp32_2",10)
+                #up_size("esp32_3",10)
                 previous_state = "couloir"
                 return                  
 
@@ -235,7 +256,7 @@ def filter_msg(msg):
 # ------ CREATION DEVICE SCENARIO ------ #
 
 def main():
-    global mon,device,target
+    global mon,device,target,state
     target = False
     device = Device('scenario.basic',ADDR)
     state=device.new_attribute('state')
@@ -244,12 +265,16 @@ def main():
     device.dump()
 
     def on():
+        global end
+        end = False
         state.value = True
         print("%s ON" % device)
+        os.system('./alexa_remote_control.sh -d "Echo MaD" -e speak:"Le scénario matin est activé"')
 
     def off():
         state.value = False
         print("%s OFF" % device)
+        os.system('./alexa_remote_control.sh -d "Echo MaD" -e speak:"Le scénario matin est désactivé"')
 
     device.add_method('on',on)
     device.add_method('off',off)
