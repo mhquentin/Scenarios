@@ -151,10 +151,10 @@ def on_event(event,dev):
             time_h = now.strftime("%H")
             today8am = now.replace(hour=8, minute=0, second=0, microsecond=0)
             # Aller
-            if ((now < today8am and dev.attributes['Presence']==True and target == False)or(state.value==True and dev.attributes['Presence']==True and target == False)):
+            if ((now < today8am and dev.attributes['presence']==True and target == False)or(state.value==True and dev.attributes['presence']==True and target == False)):
                 if (alexa_msg == False):
                     #os.system('./alexa_remote_control.sh -d "Echo MaD" -e speak:"Bonjour, on est le %s, il est %s, je vais vous indiquer le chemin"'%(time_all_date,time_h_m))
-                    os.system('./alexa_remote_control.sh -d "Echo MaD" -e speak:"Vous vous êtes levé,je vais vous indiquer le chemin des toilettes)
+                    os.system('./alexa_remote_control.sh -d "Echo MaD" -e speak:"Je viens de constater que vous vous êtes levé, je vais vous indiquer le chemin des toilettes"')
                     alexa_msg = True
                 all_up_size(8)
                 right("esp32_1")
@@ -164,14 +164,14 @@ def on_event(event,dev):
                 return
             
             # Retour
-            if (previous_state == "porte" and dev.attributes['Presence']==True and target == True):
+            if (previous_state == "porte" and dev.attributes['presence']==True and target == True):
                 all_off()
                 end = True
                 state.value = False
-                previous_state = "bordsdulit"
+                previous_state = None
                 return
 
-            if (previous_state == "porte" and dev.attributes['Presence']==True and target == False):
+            if (previous_state == "porte" and dev.attributes['presence']==True and target == False):
                 all_up_size(8)
                 previous_state = "bordsdulit"
                 return
@@ -180,21 +180,22 @@ def on_event(event,dev):
         if dev == devices.porte:
 
             # Aller
-            if (previous_state == "bordsdulit" and dev.attributes['Presence']==True and end == False):
+            if (previous_state == "bordsdulit" and dev.attributes['presence']==True and end == False):
                 all_down_size(3)
                 os.system('./alexa_remote_control.sh -d "Echo MaD" -e speak:"Laissez moi vous allumer les lumières"')
+                time.sleep(2)
                 send(LUM_COULOIR,'turn_on')
                 previous_state = "porte"
                 return
 
             # Retour
-            if (previous_state == "couloir" and dev.attributes['Presence']==True and target == True): ## faut traiter le chevauchement des zones vcouloirs et porte              
+            if (previous_state == "couloir" and dev.attributes['presence']==True and target == True): ## faut traiter le chevauchement des zones vcouloirs et porte              
                 all_down_size(3)
                 send(LUM_COULOIR,'turn_off')
                 previous_state = "porte"
                 return
 
-            if (previous_state == "couloir" and dev.attributes['Presence']==True and target == False): ## faut traiter le chevauchement des zones vcouloirs et porte              
+            if (previous_state == "couloir" and dev.attributes['presence']==True and target == False): ## faut traiter le chevauchement des zones vcouloirs et porte              
                 all_up_size(3)
                 previous_state = "porte"
                 return  
@@ -203,15 +204,15 @@ def on_event(event,dev):
         if dev == devices.couloir:
             
             # Aller
-            if (previous_state == "porte" and dev.attributes['Presence']==True and target == False):
+            if (previous_state == "porte" and dev.attributes['presence']==True and target == False):
                 all_down_size(2)
                 send(LUM_WC,'turn_on')
                 previous_state = "couloir"
                 return
 
             # Retour            
-            if (previous_state == "toilette" and dev.attributes['Presence']==True):
-                os.system('./alexa_remote_control.sh -d "Echo MaD" -e speak:"Vous êtes sortie. J éteins les lumières et je vais vous guider vers le lit"')
+            if (previous_state == "toilette" and dev.attributes['presence']==True):
+                os.system('./alexa_remote_control.sh -d "Echo MaD" -e speak:"Vous êtes sortie. J\'éteins les lumières et je vais vous guider vers le lit"')
                 all_left()
                 all_up_size(8)
                 #up_size("esp32_1",10)
@@ -224,7 +225,7 @@ def on_event(event,dev):
                 previous_state = "couloir"
                 return  
  
-            if (previous_state == "porte" and dev.attributes['Presence']==True and target == True):
+            if (previous_state == "porte" and dev.attributes['presence']==True and target == True):
                 all_left()
                 all_up_size(8)
                 #left("esp32_1")
@@ -238,7 +239,7 @@ def on_event(event,dev):
 
         # Dans les toilettes
         if dev == devices.toilette:
-            if (previous_state == "couloir" and dev.attributes['Presence']==True):
+            if (previous_state == "couloir" and dev.attributes['presence']==True):
                 all_off()
                 target = True
                 previous_state = "toilette"
@@ -258,7 +259,7 @@ def filter_msg(msg):
 # ------ CREATION DEVICE SCENARIO ------ #
 
 def main():
-    global mon,device,target,state
+    global mon,device,target,state,alexa_msg,previous_state,end
     target = False
     device = Device('scenario.basic',ADDR)
     state=device.new_attribute('state')
@@ -267,8 +268,11 @@ def main():
     device.dump()
 
     def on():
-        global end
+        global target,state,alexa_msg,previous_state,end
         end = False
+        alexa_msg = False
+        target = False
+        previous_state = None
         state.value = True
         print("%s ON" % device)
         os.system('./alexa_remote_control.sh -d "Echo MaD" -e speak:"Le scénario matin est activé"')

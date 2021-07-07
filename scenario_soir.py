@@ -74,12 +74,14 @@ def main():
         state.value = True
         print("%s ON" % device)
         os.system('./alexa_remote_control.sh -d "Echo MaD" -e speak:"Très bien monsieur, je vais alors fermer les volets, allumer la lumière et activer la radio"')
+        time.sleep(6)
         off_devices()
 
     def off():
         state.value = False
         print("%s OFF" % device)
-        os.system('./alexa_remote_control.sh -d "Echo MaD" -e speak:"Très bien monsieur, j ouvre les volets et j eteins la radio et les lumières"')
+        os.system('./alexa_remote_control.sh -d "Echo MaD" -e speak:"Très bien monsieur, j\'ouvre les volets et j\'eteins la radio et les lumières"')
+        time.sleep(6)
         on_devices()
 
 
